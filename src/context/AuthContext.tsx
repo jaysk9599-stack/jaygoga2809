@@ -77,9 +77,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         const [productsRes, customersRes, ordersRes] = await Promise.all([
-          supabase.from('products').select('*').eq('user_id', user.id),
-          supabase.from('customers').select('*').eq('user_id', user.id),
-          supabase.from('daily_orders').select('*').eq('user_id', user.id),
+          supabase.from('products').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
+          supabase.from('customers').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
+          supabase.from('daily_orders').select('*').eq('user_id', user.id).order('date', { ascending: false }).order('created_at', { ascending: false }),
         ]);
 
         if (productsRes.error) throw productsRes.error;
@@ -232,7 +232,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!newOrder) throw new Error("Failed to create order.");
     
     // The newOrder returned from Supabase already includes the 'items' array.
-    setOrders(o => [...o, newOrder]);
+    setOrders(o => [...o, newOrder].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [user]);
 
   const updateOrder = useCallback(async (orderId: string, updates: Partial<DailyOrder>) => {

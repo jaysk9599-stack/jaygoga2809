@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Plus, Users, ChevronRight, Loader2 } from 'lucide-react';
 
 const Customers: React.FC = () => {
-  const { customers, addCustomer, dataLoading } = useAuth();
+  const { customers, orders, addCustomer, dataLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -14,6 +14,21 @@ const Customers: React.FC = () => {
     address: '',
     contact_number: '',
   });
+
+  const customerSummaries = useMemo(() => {
+    return customers.map(customer => {
+      const customerOrders = orders.filter(o => o.customer_id === customer.id);
+      const totalAmount = customerOrders.reduce((sum, o) => sum + o.total_amount, 0);
+      const totalPaid = customerOrders.reduce((sum, o) => sum + (o.amount_paid || 0), 0);
+      const pendingAmount = totalAmount - totalPaid;
+      return {
+        ...customer,
+        totalAmount,
+        totalPaid,
+        pendingAmount
+      };
+    });
+  }, [customers, orders]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +167,7 @@ const Customers: React.FC = () => {
               </motion.button>
             </motion.div>
           ) : (
-            customers.map((customer, index) => (
+            customerSummaries.map((customer, index) => (
               <motion.div
                 key={customer.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -164,6 +179,20 @@ const Customers: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold text-gray-800 truncate">{customer.name}</h3>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs">
+                        <div className="flex items-center">
+                            <span className="font-medium text-gray-600">Total:</span>
+                            <span className="ml-1 font-semibold text-gray-800">₹{customer.totalAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center">
+                            <span className="font-medium text-green-600">Paid:</span>
+                            <span className="ml-1 font-semibold text-green-700">₹{customer.totalPaid.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center">
+                            <span className="font-medium text-red-600">Pending:</span>
+                            <span className="ml-1 font-semibold text-red-700">₹{customer.pendingAmount.toFixed(2)}</span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="pl-2">

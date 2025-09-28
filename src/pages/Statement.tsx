@@ -432,6 +432,11 @@ const Statement: React.FC = () => {
             return;
         }
 
+        const customerPeriodTotals = filteredOrders.reduce((acc, order) => {
+            acc[order.customer_id] = (acc[order.customer_id] || 0) + order.total_amount;
+            return acc;
+        }, {} as Record<string, number>);
+
         const summaryMap = new Map<string, {
             date: string;
             customerId: string;
@@ -462,38 +467,33 @@ const Statement: React.FC = () => {
             }
         }
 
-        const dataToSync = Array.from(summaryMap.values()).map(summary => {
-            const productsOrdered = Array.from(summary.products.entries())
-                .map(([name, qty]) => `${name} (x${qty})`)
-                .join(', ');
-            return {
-                'ID': `${summary.date}-${summary.customerId}`,
-                'Date': summary.date,
-                'Customer_Name': summary.customerName,
-                'Products_Ordered': productsOrdered,
-                'Total_Amount': summary.totalAmount,
-                'Amount_Paid': summary.amountPaid,
-                'Pending_Amount': summary.totalAmount - summary.amountPaid,
-            };
-        });
-
-        const statementForPeriod = generateStatementData('all', { start: startDate, end: endDate });
-        const customerSummaryData = statementForPeriod.customerStatements.map(cs => ({
-            'ID': `SUMMARY-${cs.customerId}-${startDate}-to-${endDate}`,
-            'Date': 'PERIOD_SUMMARY',
-            'Customer_Name': cs.customerName,
-            'Products_Ordered': `Total for ${startDate} to ${endDate}`,
-            'Total_Amount': cs.totalAmount,
-            'Amount_Paid': cs.totalPaid,
-            'Pending_Amount': cs.pendingAmount,
-        }));
-
-        const finalDataToSync = [...dataToSync, ...customerSummaryData];
+        const dataToSync = Array.from(summaryMap.values())
+            .sort((a, b) => {
+                if (a.customerName < b.customerName) return -1;
+                if (a.customerName > b.customerName) return 1;
+                return new Date(a.date).getTime() - new Date(b.date).getTime();
+            })
+            .map(summary => {
+                const productsOrdered = Array.from(summary.products.entries())
+                    .map(([name, qty]) => `${name} (x${qty})`)
+                    .join(', ');
+                
+                return {
+                    'ID': `${summary.date}-${summary.customerId}`,
+                    'Date': summary.date,
+                    'Customer_Name': summary.customerName,
+                    'Products_Ordered': productsOrdered,
+                    'Daily_Total': summary.totalAmount,
+                    'Daily_Paid': summary.amountPaid,
+                    'Daily_Pending': summary.totalAmount - summary.amountPaid,
+                    'Customer_Total_for_Period': customerPeriodTotals[summary.customerId] || 0,
+                };
+            });
 
         const response = await fetch(sheetApiUrl, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ data: finalDataToSync })
+            body: JSON.stringify({ data: dataToSync })
         });
 
         if (!response.ok) {
@@ -511,7 +511,7 @@ const Statement: React.FC = () => {
             throw new Error(errorMessage);
         }
 
-        setSyncStatus({ type: 'success', message: `Successfully synced ${finalDataToSync.length} rows of data!` });
+        setSyncStatus({ type: 'success', message: `Successfully synced ${dataToSync.length} rows, grouped by customer!` });
 
     } catch (error: any) {
         console.error("Google Sheet sync failed:", error);
@@ -677,7 +677,7 @@ const Statement: React.FC = () => {
                 This feature syncs all order summaries from the selected date range to a <strong>single sheet</strong> in your Google Sheet. It uses a service like <a href="https://sheetdb.io" target="_blank" rel="noopener noreferrer" className="text-dairy-600 font-medium underline">SheetDB</a>.
               </p>
               <p><strong>Step 1:</strong> Create a Google Sheet. The first row must have these exact headers:</p>
-              <code className="font-mono bg-gray-200 p-1 rounded">ID, Date, Customer_Name, Products_Ordered, Total_Amount, Amount_Paid, Pending_Amount</code>
+              <code className="font-mono bg-gray-200 p-1 rounded">ID, Date, Customer_Name, Products_Ordered, Daily_Total, Daily_Paid, Daily_Pending, Customer_Total_for_Period</code>
               <div className="mt-2 flex items-start">
                 <Key size={14} className="mr-2 mt-0.5 text-amber-600 flex-shrink-0" />
                 <div>
